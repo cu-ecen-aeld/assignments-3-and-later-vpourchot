@@ -1,4 +1,13 @@
+#include <errno.h>
+#include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "systemcalls.h"
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +25,11 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+	int ret = system(cmd);
+	if (WIFEXITED(ret))
+		return true;
+	else
+		return false;
 }
 
 /**
@@ -44,23 +56,38 @@ bool do_exec(int count, ...)
     {
         command[i] = va_arg(args, char *);
     }
+
     command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
+    
+    if (strchr(command[0],'/') == 0)
+	    return false;
 
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
+    int status;
 
+    pid_t pid;
+    pid = fork();
+    if (pid == -1)
+	    return false;
+    else if (pid == 0){ 
+	    execv(command[0],command);
+    }    
+
+//    printf("%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\nPID = %d\n",WIFEXITED(status),WIFSIGNALED(status),WIFSTOPPED(status),WIFCONTINUED(status),WEXITSTATUS(status),WTERMSIG(status),WSTOPSIG(status),WCOREDUMP(status),pid);
+
+    if (waitpid(pid, &status, 0) == -1){
+	    return false;
+    }
+    else if (WIFEXITED(status)){
+	    if (WEXITSTATUS(status) == 0){
+		    va_end(args);
+		    return true;
+	    }
+	    else if (WEXITSTATUS(status) == 1){
+		    va_end(args);
+		    return false;
+	    }
+    }
     va_end(args);
-
     return true;
 }
 
@@ -82,7 +109,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
+    // command[count] = command[count];
 
 
 /*
@@ -92,8 +119,55 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int status;
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    if (fd < 0) { 
+	    perror("open"); 
+	    return false; 
+    }
+
+    pid_t pid = fork();
+    if (pid == -1){
+	    close(fd);
+	    return false;
+    }
+
+    if (!pid){
+	    if (dup2(fd,1) == -1){
+		    close(fd);
+		    return false;
+	    }
+	    
+	    if (execv(command[0],command) == -1){
+		    close(fd);
+		    return false;
+	    }
+	    
+	    close(fd);
+    }
+	        
+    if (waitpid(pid, &status, 0) == -1){
+	    close(fd);
+	    va_end(args);
+            return false;
+    }
+ 
+    else if (WIFEXITED(status)){
+   
+       	    if (WEXITSTATUS(status) == 0){
+		    close(fd);
+                    va_end(args);
+		    return true;
+	    }
+       
+	    else if (WEXITSTATUS(status) == 1){
+		    close(fd);
+           	    va_end(args);	
+		    return false;
+	    }
+
+    }
 
     va_end(args);
-
     return true;
 }
