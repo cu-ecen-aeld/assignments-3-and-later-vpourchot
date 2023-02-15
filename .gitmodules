@@ -2,5 +2,5 @@
 	path = assignment-autotest
 	url = https://github.com/cu-ecen-aeld/assignment-autotest.git
 [submodule "base_external/buildroot"]
-	path = base_external/buildroot
+	path = buildroot
 	url = https://git.busybox.net/buildroot/
