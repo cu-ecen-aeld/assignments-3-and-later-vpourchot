@@ -1,7 +1,13 @@
-all: writer
+SHELL=/bin/sh
+OBJ=writer
+SRC=writer.c
+CFLAGS=-Wall -g
+CC=aarch64-none-linux-gnu-gcc
 
-writer: writer.c
-	aarch64-none-linux-gnu-gcc -g -Wall writer.c -o writer
+all: $(OBJ)
+
+writer: $(SRC)
+	$(CC) $(CFLAGS) $(SRC) -o $(OBJ)
 clean: 
-	rm -f *.o writer
+	rm -f *.o $(OBJ)
 
