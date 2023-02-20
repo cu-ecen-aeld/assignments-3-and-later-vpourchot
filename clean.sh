@@ -1,3 +1,3 @@
-cd 'dirname $0'/buildroot/
+cd buildroot/
 
 make distclean
