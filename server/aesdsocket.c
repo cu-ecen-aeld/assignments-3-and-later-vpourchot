@@ -19,7 +19,7 @@
 #define SA struct sockaddr
 
 int listen_fd, connect_d, fp;
-char *buf;
+char *buf,*file_buf;
 
 void error();
 void handle_shut_down();
@@ -38,16 +38,14 @@ int append_str();
 
 int main(int argc, char *argv[]){
 
-	if (strcmp("-d", argv[1]) == 0)
-		if (daemon (0,1) != 0)
-			error("Daemon failed");
-
         puts("test0");
-	int sig = 1;
 
         if (catch_signal(SIGINT, handle_shut_down) == -1)  
-              sig = 0;
-//		error("Can't set the interrupt handler");
+              error("SigInt");
+
+        if (catch_signal(SIGTERM, handle_shut_down) == -1)
+              error("SigTerm");
+	
     
         puts("test1");
         listen_fd =             open_listener_socket();
@@ -55,8 +53,11 @@ int main(int argc, char *argv[]){
         puts("test2");
         bind_to_port(listen_fd, SERVER_PORT);
 
+	if (strcmp("-d", argv[1]) == 0)
+                daemon (0,1);
+
         puts("test3");
-        if (listen(listen_fd, 100) == -1) 
+        if (listen(listen_fd, 10) == -1) 
                 error("Can't listen");
 
         struct sockaddr_storage client_addr;
@@ -64,48 +65,102 @@ int main(int argc, char *argv[]){
 
         puts("Waiting for connection");
 
-        buf = malloc(sizeof(buf));
-    
         char *writefile =       "/var/tmp/aesdsocketdata";
-//      char *writestr;
 
-        fp = creat(writefile,0666);
+        fp = open(writefile,O_WRONLY | O_CREAT | O_APPEND, 0666);
         if (fp == -1) 
                 error("Directory does not exist");
+	
+	puts("while_loop");
 
-        while (sig == 1) 
+	connect_d = accept(listen_fd, (struct sockaddr *)&client_addr, &address_size);
+	if (connect_d == -1)
+		error("Can't open secondary socket");
+
+        syslog(LOG_DEBUG,"Accepted connection from %d",connect_d);
+
+        while (1) 
         {
-                puts("while_loop");
-                connect_d = accept(listen_fd, (struct sockaddr *)&client_addr, &address_size);
-                if (connect_d == -1) 
-                        error("Can't open secondary socket");
-                puts("while_loop2");
-                syslog(LOG_DEBUG,"Accepted connection from %d",connect_d);
-    
-                puts("while_loop1");    
-                int new_line = read_in(connect_d, buf, sizeof(buf));
-		if (new_line != 0)
-			error("Didn't finish stream");
+                buf = (char *) malloc(sizeof(buf));
+		printf("%s",buf);
+                puts("while_loop1");  
+//                int new_line = read_in(connect_d,buf, sizeof(buf),fp,writefile);
+//		if (new_line != 0)
+//			error("Didn't finish stream\n");
+	       
+	        int slen =      sizeof(buf);
+	        char *s = 	buf;
+       		int c =         recv(connect_d, s, slen, 0);
+		printf("%d\n%s\n",c,s);
+	        while (c > 0) // && (s[c-1] != '\n'))
+        	{
+                	puts("while_2\n");
+			s += c;
+			slen -= c;
+			printf("%s",s);
+//	                slen -= c;
+//	                c = recv(connect_d,packet_buf, slen, 0);
+        	
 		
-		if (append_str(fp,writefile,buf) != 0)
-			error("Couldn't append test to file");
+			ssize_t nr = write(fp,s,strlen(s));
+        
+			if (nr == -1)               		
+				syslog(LOG_ERR,"Invalid Number of arguments: No String Provided %s",buf);
+			int fsync(int fp);
+	 		c = recv(connect_d,s, slen, 0);
+		}
+//		if (append_str(fp,writefile,packet_buf) != 0)
+//			error("Couldn't append test to file");
+		puts("break");
+		if (buf)
+			free(buf);
+		
+		puts("after_loop");
+		file_buf = (char *) malloc(sizeof(file_buf));
+		long length;
+		FILE *f = fopen(writefile, "rb");
 
-		if (send(connect_d, buf, strlen(buf), 0) == -1)
-                        error("send");
+		if (f)
+		{
+			fseek (f, 0, SEEK_END);
+			length = ftell(f);
+			fseek (f,0,SEEK_SET);
+			
+			if (file_buf)
+				fread(file_buf,1,length,f);
+			fclose(f);
+		}
+		printf("%s",file_buf);
+		if (file_buf)
+		{
+			if (send(connect_d,file_buf,strlen(file_buf), 0) == -1)
+                        	error("send");
+			free(file_buf);
+		}
 
-               /* if (remove(writefile) == 0)
-                        puts("file removed");
-                else
-                        error("remove file fail");
-                */
 		puts("while_loop_end");
-                close(fp);
-                close(listen_fd);
-                free(buf);
-                close(connect_d);
-		
-		return 0;
+/*		
+		if (catch_signal(SIGINT, handle_shut_down) == -1)
+              		sig = 0;
+	        if (catch_signal(SIGTERM, handle_shut_down) == -1)
+	                sig = 0;
+*/	
         }
+        if (remove(writefile) == 0)
+                puts("file removed");
+        else
+                error("remove file fail");
+
+	if (fp)
+		close(fp);
+        if (listen_fd)
+		close(listen_fd);
+        if (file_buf)
+		free(file_buf);
+	if (buf)
+		free(buf);
+        if (connect_d)
+		close(connect_d);
 
 	return 0;
 
@@ -120,19 +175,20 @@ int main(int argc, char *argv[]){
 
 void error(char *msg)
 {
-	fprintf(stderr, "%s/n: %s/n", msg, strerror(errno));
-	if (buf)
-	{
-		free(buf);
-                puts("shut_down_err");
-                ssize_t n = read(fp, buf, BUFSIZ);
+	fprintf(stderr, "%s\n: %s\n", msg, strerror(errno));
 
-                send(connect_d, &n, sizeof(n),0);
+        puts("shut_down_err\n");
+
+        if (fp)
                 close(fp);
+        if (listen_fd)
                 close(listen_fd);
+        if (file_buf)
+                free(file_buf);
+        if (buf)
                 free(buf);
+        if (connect_d)
                 close(connect_d);
-        }
 	
 	exit(-1);
 }
@@ -167,6 +223,7 @@ void bind_to_port(int socket, int port)
 		error("Can't bind to socket");
 }
 
+/*
 int append_str(int fp, char *writefile,char *writestr) {
 
         ssize_t nr = write(fp,writestr,strlen(writestr));
@@ -175,27 +232,61 @@ int append_str(int fp, char *writefile,char *writestr) {
                 return 1;
         }
         int fsync(int fp);
-
-        int close (int fp);
+	
+//        int close (int fp);
 
         return 0;
 
 }
 
-
-int read_in(int socket, char *buf, int len)
+int read_in(int socket, char *buf, int len ,int fp, char *writefile)
 {
         char *s =       buf;
         int slen =      len;
-        int c =         recv(socket, s, slen, 0); 
+        int c =         recv(socket, s, slen, 0);
 
         while ((c > 0) && (s[c-1] != '\n'))
         {
                 s += c;
                 slen -= c;
-                c = recv(socket, s, slen, 0); 
-
+                c = recv(socket, s, slen, 0);
         }
+
+        if (append_str(fp,writefile,buf) != 0)
+                error("Couldn't append test to file");
+
+
+        if (c < 0)
+                return c;
+        else if (c == 0)
+                buf[0] = '\n';
+        else
+                s[c-1] = '\n';
+
+//      int close(int fp);
+
+        printf("%s",s);
+        return len - slen;
+
+}
+
+
+int read_in(int socket, char *buf, int len) //,int fp, char *writefile)
+{
+        char *s =       buf;
+        int slen =      len;
+        int c =         recv(socket, s, slen, 0); 
+
+	while ((c > 0) && (s[c-1] != '\n'))
+        {
+               	s += c;
+               	slen -= c;
+               	c = recv(socket, s, slen, 0); 
+	}
+		
+//	if (append_str(fp,writefile,buf) != 0)
+//                error("Couldn't append test to file");
+
 
         if (c < 0)  
                 return c;
@@ -204,10 +295,13 @@ int read_in(int socket, char *buf, int len)
         else
                 s[c-1] = '\n';
 	
+//	int close(int fp);
+		
 	printf("%s",s);
         return len - slen;
 
 }
+*/
 
 int catch_signal(int sig, void (*handler)(int))
 {
@@ -221,17 +315,16 @@ int catch_signal(int sig, void (*handler)(int))
 void handle_shut_down(int sig)
 {
 	printf("%d\n",sig);
-	if (fp && listen_fd)
-	{
-	        puts("shut_down");
-		ssize_t n = read(fp, buf, BUFSIZ);
-
-                send(connect_d, &n, sizeof(n),0);
+        if (fp)
                 close(fp);
-		close(listen_fd);
-		free(buf);
-		close(connect_d);
-	}
+        if (listen_fd)
+                close(listen_fd);
+        if (file_buf)
+                free(file_buf);
+        if (buf)
+                free(buf);
+        if (connect_d)
+                close(connect_d);
 	
 	puts("Goodbye!");
         exit(0);
