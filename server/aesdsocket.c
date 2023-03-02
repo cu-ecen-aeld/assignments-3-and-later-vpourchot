@@ -71,7 +71,7 @@ int main(int argc, char *argv[]){
         if (fp == -1) 
                 error("Directory does not exist");
 	
-	puts("while_loop");
+	puts("test4");
 
 	connect_d = accept(listen_fd, (struct sockaddr *)&client_addr, &address_size);
 	if (connect_d == -1)
@@ -81,13 +81,14 @@ int main(int argc, char *argv[]){
 
         while (1) 
         {
-                buf = (char *) malloc(sizeof(buf));
-		printf("%s",buf);
-                puts("while_loop1");  
-//                int new_line = read_in(connect_d,buf, sizeof(buf),fp,writefile);
-//		if (new_line != 0)
-//			error("Didn't finish stream\n");
-	       
+                if (!buf)
+			buf = malloc(sizeof(buf));
+		printf("%s\n",buf);
+                puts("loop1");  
+                int new_line = read_in(connect_d,buf, sizeof(buf),fp,writefile);
+		if (new_line != 0)
+			error("Didn't finish stream\n");
+/*	       
 	        int slen =      sizeof(buf);
 	        char *s = 	buf;
        		int c =         recv(connect_d, s, slen, 0);
@@ -109,14 +110,15 @@ int main(int argc, char *argv[]){
 			int fsync(int fp);
 	 		c = recv(connect_d,s, slen, 0);
 		}
+*/
 //		if (append_str(fp,writefile,packet_buf) != 0)
 //			error("Couldn't append test to file");
-		puts("break");
-		if (buf)
+		puts("loop2");
+/*		if (buf)
 			free(buf);
 		
-		puts("after_loop");
-		file_buf = (char *) malloc(sizeof(file_buf));
+		puts("loop3");
+*/		file_buf = (char *) malloc(sizeof(file_buf));
 		long length;
 		FILE *f = fopen(writefile, "rb");
 
@@ -130,6 +132,7 @@ int main(int argc, char *argv[]){
 				fread(file_buf,1,length,f);
 			fclose(f);
 		}
+		file_buf[length - 1] = '\n';
 		printf("%s",file_buf);
 		if (file_buf)
 		{
@@ -138,14 +141,9 @@ int main(int argc, char *argv[]){
 			free(file_buf);
 		}
 
-		puts("while_loop_end");
-/*		
-		if (catch_signal(SIGINT, handle_shut_down) == -1)
-              		sig = 0;
-	        if (catch_signal(SIGTERM, handle_shut_down) == -1)
-	                sig = 0;
-*/	
-        }
+		puts("loop_end");
+        
+	}
         if (remove(writefile) == 0)
                 puts("file removed");
         else
@@ -223,7 +221,7 @@ void bind_to_port(int socket, int port)
 		error("Can't bind to socket");
 }
 
-/*
+
 int append_str(int fp, char *writefile,char *writestr) {
 
         ssize_t nr = write(fp,writestr,strlen(writestr));
@@ -239,6 +237,7 @@ int append_str(int fp, char *writefile,char *writestr) {
 
 }
 
+
 int read_in(int socket, char *buf, int len ,int fp, char *writefile)
 {
         char *s =       buf;
@@ -252,25 +251,22 @@ int read_in(int socket, char *buf, int len ,int fp, char *writefile)
                 c = recv(socket, s, slen, 0);
         }
 
-        if (append_str(fp,writefile,buf) != 0)
-                error("Couldn't append test to file");
-
-
         if (c < 0)
                 return c;
         else if (c == 0)
-                buf[0] = '\n';
+                buf[0] = '\0';
         else
-                s[c-1] = '\n';
+                s[c-1] = '\0';
 
-//      int close(int fp);
+	if (append_str(fp,writefile,buf) != 0)
+                error("Couldn't append test to file");
 
         printf("%s",s);
-        return len - slen;
+        return 0; //len - slen;
 
 }
 
-
+/*
 int read_in(int socket, char *buf, int len) //,int fp, char *writefile)
 {
         char *s =       buf;
