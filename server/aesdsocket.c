@@ -18,19 +18,27 @@
 
 #define SERVER_PORT 9000
 
+/*
 struct addrinfo *servinfo;
 int listener_d,connect_d,fp;
 char *buf,*file_buf,*writefile;
-
-void error();
-void handle_shut_down();
-void bind_to_port();
-
-int open_listener_socket();
-int catch_signal();
-int read_in();
-int append_str();
-int BUF_SIZE = 1024;
+*/
+FILE 	*fp_buf;
+void 	error();
+void 	handle_shut_down();
+void 	bind_to_port();
+struct 	addrinfo *servinfo;
+//struct 	addrinfo hints;
+char	*writefile;
+char	*buf;
+char	*file_buf;
+int	listener_d;
+int	connect_d;
+int 	open_listener_socket();
+int 	catch_signal();
+int 	read_in();
+int 	append_str();
+int 	BUF_SIZE = 1024;
 
 /* Opens a stream socket bound to port 9000,
  * failing and returning -1 if any of the socket connection
@@ -38,7 +46,8 @@ int BUF_SIZE = 1024;
  */
 
 
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[])
+{
 
         puts("test0");
 	bool d_mode = false;
@@ -54,6 +63,10 @@ int main(int argc, char *argv[]){
 //              error("SigTerm");
 	signal(SIGINT, handle_shut_down);
 	signal(SIGTERM, handle_shut_down);
+
+//	struct addrinfo *servinfo;
+//	int listener_d,connect_d,fp;
+//	char *buf,*file_buf,*writefile;
 
 	int status;
 	struct addrinfo hints;
@@ -114,19 +127,20 @@ int main(int argc, char *argv[]){
 
         writefile = "/var/tmp/aesdsocketdata";
 
-        fp = open(writefile,O_WRONLY | O_CREAT | O_APPEND | O_TRUNC, 0666);
-        if (fp == -1) 
+//        fp = open(writefile,O_WRONLY | O_CREAT | O_APPEND | O_TRUNC, 0666);
+        FILE *fp_buf = fopen(writefile, "w+");
+	if (fp_buf == NULL) 
 	{
 		perror("Directory does not exist");
 		return -1;
 	}
 //	file_buf = malloc(BUF_SIZE);
-	
+	fclose(fp_buf);
 	puts("test4");
 /*        connect_d = accept(listener_d, servinfo->ai_addr, &servinfo->ai_addrlen);
         if (connect_d == -1)
                 error("Can't open secondary socket");
-
+		
         syslog(LOG_DEBUG,"Accepted connection from %d",connect_d);
 	puts("test4");	
 */
@@ -177,30 +191,30 @@ int main(int argc, char *argv[]){
 				if (c == '\n')
 				{
 					puts("if stmt append str");
-					FILE *fp;
+//					FILE *fp, *fp_buf;
 					
-					fp = fopen(writefile, "a");
-					if (fp == NULL)
+					fp_buf = fopen(writefile, "a");
+					if (fp_buf == NULL)
 					{
 						syslog(LOG_ERR, "Error opening %s", writefile);
 						exit(EXIT_FAILURE);
 					}
 
-					fputs(buf,fp);
-					if (ferror(fp))
+					fputs(buf,fp_buf);
+					if (ferror(fp_buf))
 					{
 						syslog(LOG_ERR, "Error writing %s", buf);
 						exit(EXIT_FAILURE);
 					}		
-					fclose(fp);
+					fclose(fp_buf);
 
 			//		file_buf = (char *) malloc(BUF_SIZE);
 			//		memset(file_buf,0,BUF_SIZE);
 			 	 	size_t len = 0;
 					char * line = NULL;
 					ssize_t buffer;
-					fp = fopen(writefile, "r");
-					if (fp == NULL)
+					fp_buf = fopen(writefile, "r");
+					if (fp_buf == NULL)
 						error("file not founds");
 
 /*
@@ -215,7 +229,7 @@ int main(int argc, char *argv[]){
 //			fclose(f);
 		}
 */		
-					while((buffer = getline(&line,&len,fp)) != -1)
+					while((buffer = getline(&line,&len,fp_buf)) != -1)
 					{
 						ssize_t sent = send(connect_d, line, buffer, 0);
 						if(sent == -1)
@@ -237,11 +251,12 @@ int main(int argc, char *argv[]){
 //                      length = read(fp,file_buf,sizeof(file_buf));
 			
 		}
-*/				//	fclose(fp);
+*/					fclose(fp_buf);
 					break;
 				}
 			}
 			memset(file_buf, 0, BUF_SIZE);
+//			free(buf);
 		}
 		
 		close(connect_d);
@@ -251,13 +266,16 @@ int main(int argc, char *argv[]){
 		puts("loop_end");
         
 	}
-        if (remove(writefile) == 0)
+	fclose(fp_buf);
+	freeaddrinfo(servinfo);
+//	freeaddrinfo(hints);
+	if (remove(writefile) == 0)
                 puts("file removed");
         else
                 error("remove file fail");
 
-/*	if (fp)
-		close(fp);
+	if (fp_buf)
+		fclose(fp_buf);
         if (listener_d)
 		close(listener_d);
         if (file_buf)
@@ -266,7 +284,7 @@ int main(int argc, char *argv[]){
 		free(buf);
         if (connect_d)
 		close(connect_d);
-*/
+
 	return 0;
 
 }
@@ -283,8 +301,8 @@ void error(char *msg)
 
         puts("shut_down_err\n");
 
-/*        if (fp)
-                close(fp);
+        if (fp_buf)
+                fclose(fp_buf);
         if (listener_d)
                 close(listener_d);
         if (file_buf)
@@ -293,7 +311,7 @@ void error(char *msg)
                 free(buf);
         if (connect_d)
                 close(connect_d);
-*/
+
         if (remove(writefile) == 0)
 
                 puts("file removed");
@@ -414,8 +432,8 @@ void handle_shut_down(int sig)
 {
 	printf("%d\n",sig);
         
-/*	if (fp)
-                close(fp);
+	if (fp_buf)
+                fclose(fp_buf);
         if (listener_d)
                 close(listener_d);
         if (file_buf)
@@ -424,7 +442,7 @@ void handle_shut_down(int sig)
                 free(buf);
         if (connect_d)
                 close(connect_d);
-*/
+
 	if (remove(writefile) == 0)
                 puts("file removed");
         else
