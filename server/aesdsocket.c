@@ -2,6 +2,7 @@
 #include <syslog.h>
 #include <sys/socket.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,7 +19,7 @@
 #define SERVER_PORT 9000
 
 struct addrinfo *servinfo;
-int listener_d, connect_d, fp;
+int listener_d,connect_d,fp;
 char *buf,*file_buf,*writefile;
 
 void error();
@@ -46,12 +47,14 @@ int main(int argc, char *argv[]){
 		if (strcmp(argv[1], "-d") == 0)
 			d_mode = true;
 	}
-        if (catch_signal(SIGINT, handle_shut_down) == -1)  
-              error("SigInt");
+//        if (catch_signal(SIGINT, handle_shut_down) == -1)  
+//              error("SigInt");
 
-        if (catch_signal(SIGTERM, handle_shut_down) == -1)
-              error("SigTerm");
-	
+//        if (catch_signal(SIGTERM, handle_shut_down) == -1)
+//              error("SigTerm");
+	signal(SIGINT, handle_shut_down);
+	signal(SIGTERM, handle_shut_down);
+
 	int status;
 	struct addrinfo hints;
         memset(&hints, 0, sizeof(hints));
@@ -61,28 +64,38 @@ int main(int argc, char *argv[]){
 //        int reuse =             1;
 
         if ((status = getaddrinfo(NULL, "9000", &hints, &servinfo) != 0))
-                        error("getaddrinfo fail");
-
+	{
+	        perror("getaddrinfo fail");
+		return -1;
+	}
     
         puts("test1");
         listener_d = socket(servinfo->ai_family, servinfo->ai_socktype, 0); 
         if (listener_d == -1) 
-                error("Can't open socket");
+	{
+		perror("Can't open socket");
+		return -1;
+	}
 
         puts("test2");
         if (setsockopt(listener_d, SOL_SOCKET, SO_REUSEADDR,&(int){1}, sizeof(int)) == -1)
-                error("Can't set the reuse option on the socket");
+	{
+		perror("Can't set the reuse option on the socket");
+		return -1;
+	}
 
         int c = bind (listener_d, servinfo->ai_addr, servinfo->ai_addrlen);
         if (c == -1)
-                error("Can't bind to socket");
-	
+	{
+		perror("Can't bind to socket");
+		return -1;
+	}
 //        bind_to_port(listen_fd, SERVER_PORT);
 	if(d_mode && c == 0)
 	{
 		int pid = fork();
-		if(pid > )
-			exit;
+		if(pid > 0 )
+			exit(0);
 	}
 
 //	if (strcmp("-d", argv[1]) == 0)
@@ -90,8 +103,10 @@ int main(int argc, char *argv[]){
 
         puts("test3");
         if (listen(listener_d, 10) == -1) 
-                error("Can't listen");
-
+	{
+		perror("Can't listen");
+		return -1;
+	}
 //        struct sockaddr_storage client_addr;
 //        unsigned int address_size = sizeof(client_addr);
 
@@ -101,9 +116,11 @@ int main(int argc, char *argv[]){
 
         fp = open(writefile,O_WRONLY | O_CREAT | O_APPEND | O_TRUNC, 0666);
         if (fp == -1) 
-                error("Directory does not exist");
-
-	file_buf = malloc(BUF_SIZE);
+	{
+		perror("Directory does not exist");
+		return -1;
+	}
+//	file_buf = malloc(BUF_SIZE);
 	
 	puts("test4");
 /*        connect_d = accept(listener_d, servinfo->ai_addr, &servinfo->ai_addrlen);
@@ -119,23 +136,73 @@ int main(int argc, char *argv[]){
 
                 connect_d = accept(listener_d, servinfo->ai_addr, &servinfo->ai_addrlen);
         	if (connect_d == -1)
-                	error("Can't open secondary socket");
-
+		{
+                	perror("Can't open secondary socket");
+			return -1;
+		}
        		syslog(LOG_DEBUG,"Accepted connection from %d",connect_d);
 		
-                puts("loop1");  
-                int new_line = read_in(connect_d,fp,writefile);
-		if (new_line != 0)
-			error("Didn't finish stream\n");
-		
-		puts("loop2");
+		buf = malloc(1);
+		memset(buf, 0, 1);
+		size_t buf_len = 0;
+	  	file_buf = malloc(BUF_SIZE);
+                memset(file_buf,0,BUF_SIZE);
+		ssize_t read_d = 0;
 
-//		file_buf = (char *) malloc(BUF_SIZE);
-		memset(file_buf,0,BUF_SIZE);
- 	 	size_t len = 0;
-		char * line = NULL;
-		ssize_t buffer;
-		FILE *f = fopen(writefile, "r");
+		puts("loop1");  
+//                int new_line = read_in(connect_d,fp,writefile);
+//		if (new_line != 0)
+//			error("Didn't finish stream\n");
+
+		
+		while((read_d = recv(connect_d,file_buf,BUF_SIZE,0)) > 0)
+		{
+			buf_len += read_d;
+			buf = realloc(buf,(buf_len + read_d)+1);
+
+			if (buf  == NULL)
+			{
+				exit(EXIT_FAILURE);
+			}
+
+			for (ssize_t i = 0; i < read_d; i++)
+			{
+				char c = file_buf[i];
+				char tmpstr[2];
+				tmpstr[0] = c;
+				tmpstr[1] = 0;
+
+				strcat(buf,tmpstr);
+
+				if (c == '\n')
+				{
+					puts("if stmt append str");
+					FILE *fp;
+					
+					fp = fopen(writefile, "a");
+					if (fp == NULL)
+					{
+						syslog(LOG_ERR, "Error opening %s", writefile);
+						exit(EXIT_FAILURE);
+					}
+
+					fputs(buf,fp);
+					if (ferror(fp))
+					{
+						syslog(LOG_ERR, "Error writing %s", buf);
+						exit(EXIT_FAILURE);
+					}		
+					fclose(fp);
+
+			//		file_buf = (char *) malloc(BUF_SIZE);
+			//		memset(file_buf,0,BUF_SIZE);
+			 	 	size_t len = 0;
+					char * line = NULL;
+					ssize_t buffer;
+					fp = fopen(writefile, "r");
+					if (fp == NULL)
+						error("file not founds");
+
 /*
 		if (f)
 		{
@@ -145,17 +212,17 @@ int main(int argc, char *argv[]){
 			
 			fread(file_buf,1,length,f);
 //			file_buf[length-1] = '\0';
-			fclose(f);
+//			fclose(f);
 		}
 */		
-		while((buffer = getline(&line,&len,f)) != -1)
-		{
-			ssize_t sent = send(connect_d, line, buffer, 0);
-			if(sent == -1)
-				error("unable to send");
-			else
-				printf("Sent: %s",line);
-		}
+					while((buffer = getline(&line,&len,fp)) != -1)
+					{
+						ssize_t sent = send(connect_d, line, buffer, 0);
+						if(sent == -1)
+							error("unable to send");
+						else
+							printf("Sent: %s",line);
+					}
 /*		char *s = file_buf;
 //		length = read(fp,file_buf,BUF_SIZE);
                 printf("%s",s);	
@@ -167,14 +234,20 @@ int main(int argc, char *argv[]){
                                 error("unable to send");
 
 //			memset(file_buf,0,BUF_SIZE);
-
 //                      length = read(fp,file_buf,sizeof(file_buf));
 			
 		}
-*/		fclose(f);	
+*/				//	fclose(fp);
+					break;
+				}
+			}
+			memset(file_buf, 0, BUF_SIZE);
+		}
 		
 		close(connect_d);
-		
+//		freeaddrinfo(servinfo);
+		free(buf);
+		free(file_buf);
 		puts("loop_end");
         
 	}
@@ -183,7 +256,7 @@ int main(int argc, char *argv[]){
         else
                 error("remove file fail");
 
-	if (fp)
+/*	if (fp)
 		close(fp);
         if (listener_d)
 		close(listener_d);
@@ -193,9 +266,8 @@ int main(int argc, char *argv[]){
 		free(buf);
         if (connect_d)
 		close(connect_d);
-
+*/
 	return 0;
-
 
 }
 
@@ -211,7 +283,7 @@ void error(char *msg)
 
         puts("shut_down_err\n");
 
-        if (fp)
+/*        if (fp)
                 close(fp);
         if (listener_d)
                 close(listener_d);
@@ -221,7 +293,17 @@ void error(char *msg)
                 free(buf);
         if (connect_d)
                 close(connect_d);
-	exit(-1);
+*/
+        if (remove(writefile) == 0)
+
+                puts("file removed");
+        else
+                error("remove file fail");
+        freeaddrinfo(servinfo);
+        shutdown(listener_d, SHUT_RDWR);
+        puts("Goodbye!");
+        exit(-1);
+
 }
 
 /*
@@ -331,7 +413,8 @@ int catch_signal(int sig, void (*handler)(int))
 void handle_shut_down(int sig)
 {
 	printf("%d\n",sig);
-        if (fp)
+        
+/*	if (fp)
                 close(fp);
         if (listener_d)
                 close(listener_d);
@@ -341,14 +424,15 @@ void handle_shut_down(int sig)
                 free(buf);
         if (connect_d)
                 close(connect_d);
-        if (remove(writefile) == 0)
-
+*/
+	if (remove(writefile) == 0)
                 puts("file removed");
         else
                 error("remove file fail");	
-
+	freeaddrinfo(servinfo);
+	shutdown(listener_d, SHUT_RDWR);
 	puts("Goodbye!");
-        exit(0);
+        exit(sig);
 }
 
 
