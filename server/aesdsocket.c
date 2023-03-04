@@ -23,7 +23,7 @@ struct addrinfo *servinfo;
 int listener_d,connect_d,fp;
 char *buf,*file_buf,*writefile;
 */
-FILE 	*fp_buf;
+//FILE 	*fp_buf;
 void 	error();
 void 	handle_shut_down();
 void 	bind_to_port();
@@ -37,7 +37,7 @@ int	connect_d;
 int 	open_listener_socket();
 int 	catch_signal();
 int 	read_in();
-int 	append_str();
+void 	append_str();
 int 	BUF_SIZE = 1024;
 
 /* Opens a stream socket bound to port 9000,
@@ -191,8 +191,11 @@ int main(int argc, char *argv[])
 				if (c == '\n')
 				{
 					puts("if stmt append str");
-//					FILE *fp, *fp_buf;
+					append_str(writefile, buf);
 					
+					FILE * fp_buf;	
+//					FILE *fp, *fp_buf;
+/*										
 					fp_buf = fopen(writefile, "a");
 					if (fp_buf == NULL)
 					{
@@ -207,7 +210,7 @@ int main(int argc, char *argv[])
 						exit(EXIT_FAILURE);
 					}		
 					fclose(fp_buf);
-
+*/
 			//		file_buf = (char *) malloc(BUF_SIZE);
 			//		memset(file_buf,0,BUF_SIZE);
 			 	 	size_t len = 0;
@@ -251,39 +254,50 @@ int main(int argc, char *argv[])
 //                      length = read(fp,file_buf,sizeof(file_buf));
 			
 		}
-*/					fclose(fp_buf);
+*/
+					if (line)
+						free(line);
+					if (fp_buf)
+						fclose(fp_buf);
+//					free(file_buf);
 					break;
 				}
 			}
 			memset(file_buf, 0, BUF_SIZE);
 //			free(buf);
 		}
-		
-		close(connect_d);
+	        if (file_buf)
+                	free(file_buf);
+        	if (buf)
+                	free(buf);
+        	if (connect_d)
+                	close(connect_d);	
+//		close(connect_d);
 //		freeaddrinfo(servinfo);
-		free(buf);
-		free(file_buf);
+//		free(buf);
+//		free(file_buf);
 		puts("loop_end");
         
 	}
-	fclose(fp_buf);
-	freeaddrinfo(servinfo);
+	
+//	if (servinfo)
+//		freeaddrinfo(servinfo);
 //	freeaddrinfo(hints);
 	if (remove(writefile) == 0)
                 puts("file removed");
         else
                 error("remove file fail");
 
-	if (fp_buf)
-		fclose(fp_buf);
+//	if (fp_buf)
+//		fclose(fp_buf);
         if (listener_d)
 		close(listener_d);
-        if (file_buf)
-		free(file_buf);
-	if (buf)
-		free(buf);
-        if (connect_d)
-		close(connect_d);
+//        if (file_buf)
+//		free(file_buf);
+//	if (buf)
+//		free(buf);
+//        if (connect_d)
+//		close(connect_d);
 
 	return 0;
 
@@ -301,14 +315,14 @@ void error(char *msg)
 
         puts("shut_down_err\n");
 
-        if (fp_buf)
-                fclose(fp_buf);
+//        if (fp_buf)
+//                fclose(fp_buf);
         if (listener_d)
                 close(listener_d);
-        if (file_buf)
-                free(file_buf);
-        if (buf)
-                free(buf);
+//        if (file_buf)
+//                free(file_buf);
+//        if (buf)
+//                free(buf);
         if (connect_d)
                 close(connect_d);
 
@@ -317,7 +331,8 @@ void error(char *msg)
                 puts("file removed");
         else
                 error("remove file fail");
-        freeaddrinfo(servinfo);
+        if (servinfo)
+		freeaddrinfo(servinfo);
         shutdown(listener_d, SHUT_RDWR);
         puts("Goodbye!");
         exit(-1);
@@ -354,10 +369,19 @@ void bind_to_port(int socket, int port)
 	if (c == -1)
 		error("Can't bind to socket");
 }
+*/
 
+void append_str(char *writefile,char *writestr) 
+{
+	FILE * fp = fopen(writefile, "a");
+	if (fp == NULL)
+		error("Can't open file");
 
-int append_str(int fp, char *writefile,char *writestr) {
+	fputs(writestr, fp);
+	if (ferror(fp))
+		error("error writing file");
 
+/*
         ssize_t nr = write(fp,writestr,strlen(writestr));
         if (nr == -1) {
                 error("unable to write to file");
@@ -365,11 +389,11 @@ int append_str(int fp, char *writefile,char *writestr) {
         int fsync(int fp);
 	
 //        int close (int fp);
-
-        return 0;
+*/
+        fclose(fp);
 
 }
-*/
+
 
 int read_in(int socket,int fp, char *writefile)
 {
@@ -432,22 +456,24 @@ void handle_shut_down(int sig)
 {
 	printf("%d\n",sig);
         
-	if (fp_buf)
-                fclose(fp_buf);
-        if (listener_d)
-                close(listener_d);
+//	if (fp_buf)
+//                fclose(fp_buf);
+//        if (listener_d)
+//                close(listener_d);
         if (file_buf)
                 free(file_buf);
         if (buf)
                 free(buf);
-        if (connect_d)
-                close(connect_d);
+/*        if (connect_d)
+//                close(connect_d);
 
 	if (remove(writefile) == 0)
                 puts("file removed");
         else
                 error("remove file fail");	
-	freeaddrinfo(servinfo);
+*/
+	if (servinfo)
+		freeaddrinfo(servinfo);
 	shutdown(listener_d, SHUT_RDWR);
 	puts("Goodbye!");
         exit(sig);
