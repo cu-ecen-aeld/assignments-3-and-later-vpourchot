@@ -26,18 +26,25 @@ char *buf,*file_buf,*writefile;
 //FILE 	*fp_buf;
 void 	error();
 void 	handle_shut_down();
+//void 	handle_shut_down_2();
 void 	bind_to_port();
 struct 	addrinfo *servinfo;
 //struct 	addrinfo hints;
 char	*writefile;
 char	*buf;
 char	*file_buf;
+bool	buf_free;
+bool	term;
+bool	connected;
+bool	file_buf_free;
+bool 	no_queue;
+bool	str_search();
 int	listener_d;
 int	connect_d;
 int 	open_listener_socket();
 int 	catch_signal();
 int 	read_in();
-void 	append_str();
+void	append_str();
 int 	BUF_SIZE = 1024;
 
 /* Opens a stream socket bound to port 9000,
@@ -48,7 +55,9 @@ int 	BUF_SIZE = 1024;
 
 int main(int argc, char *argv[])
 {
-
+	term = false;
+	no_queue = false;
+	connected = false;
         puts("test0");
 	bool d_mode = false;
 	if(argc == 2)
@@ -61,13 +70,16 @@ int main(int argc, char *argv[])
 
 //        if (catch_signal(SIGTERM, handle_shut_down) == -1)
 //              error("SigTerm");
+	buf_free = true;
+	file_buf_free = true;
+	
 	signal(SIGINT, handle_shut_down);
 	signal(SIGTERM, handle_shut_down);
 
 //	struct addrinfo *servinfo;
 //	int listener_d,connect_d,fp;
 //	char *buf,*file_buf,*writefile;
-
+	
 	int status;
 	struct addrinfo hints;
         memset(&hints, 0, sizeof(hints));
@@ -83,7 +95,7 @@ int main(int argc, char *argv[])
 	}
     
         puts("test1");
-        listener_d = socket(servinfo->ai_family, servinfo->ai_socktype, 0); 
+        listener_d = socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol); 
         if (listener_d == -1) 
 	{
 		perror("Can't open socket");
@@ -113,7 +125,7 @@ int main(int argc, char *argv[])
 
 //	if (strcmp("-d", argv[1]) == 0)
 //                daemon (0,1);
-
+	char ipv4[INET_ADDRSTRLEN];
         puts("test3");
         if (listen(listener_d, 10) == -1) 
 	{
@@ -144,22 +156,30 @@ int main(int argc, char *argv[])
         syslog(LOG_DEBUG,"Accepted connection from %d",connect_d);
 	puts("test4");	
 */
-        while (1) 
+        while (!term || !no_queue) 
         {
 		puts("loop0");
 
                 connect_d = accept(listener_d, servinfo->ai_addr, &servinfo->ai_addrlen);
         	if (connect_d == -1)
 		{
+			if (errno == EWOULDBLOCK)
+			{
+				puts("EWOULDBLOCK");
+				no_queue = true;
+			}
                 	perror("Can't open secondary socket");
 			return -1;
 		}
-       		syslog(LOG_DEBUG,"Accepted connection from %d",connect_d);
+		connected = true;
+       		syslog(LOG_INFO,"Accepted connection from %s\n",inet_ntop(AF_INET,&servinfo,ipv4, INET_ADDRSTRLEN));
 		
 		buf = malloc(1);
+		buf_free = false;
 		memset(buf, 0, 1);
 		size_t buf_len = 0;
 	  	file_buf = malloc(BUF_SIZE);
+		file_buf_free = false;
                 memset(file_buf,0,BUF_SIZE);
 		ssize_t read_d = 0;
 
@@ -191,7 +211,8 @@ int main(int argc, char *argv[])
 				if (c == '\n')
 				{
 					puts("if stmt append str");
-					append_str(writefile, buf);
+					bool status = str_search(writefile, buf);
+					append_str(writefile, buf, status);
 					
 					FILE * fp_buf;	
 //					FILE *fp, *fp_buf;
@@ -266,16 +287,26 @@ int main(int argc, char *argv[])
 			memset(file_buf, 0, BUF_SIZE);
 //			free(buf);
 		}
-	        if (file_buf)
-                	free(file_buf);
-        	if (buf)
-                	free(buf);
-        	if (connect_d)
+//	        memset(file_buf, 0, BUF_SIZE);
+//		memset(buf, 0, 1);
+		
+           	free(file_buf);
+        	file_buf_free = true;
+                free(buf);
+		buf_free = true;
+
+		if (connect_d)
                 	close(connect_d);	
+		syslog(LOG_INFO, "Closed connection from %s\n", inet_ntop(AF_INET,&servinfo,ipv4,INET_ADDRSTRLEN));
 //		close(connect_d);
 //		freeaddrinfo(servinfo);
 //		free(buf);
 //		free(file_buf);
+/*	        if (remove(writefile) == 0)
+	                puts("file removed");
+        	else
+                	error("remove file fail");
+*/
 		puts("loop_end");
         
 	}
@@ -287,11 +318,13 @@ int main(int argc, char *argv[])
                 puts("file removed");
         else
                 error("remove file fail");
-
+	freeaddrinfo(servinfo);
+	shutdown(listener_d, SHUT_RDWR);
+	puts("Shutdown Goodbye");
 //	if (fp_buf)
 //		fclose(fp_buf);
-        if (listener_d)
-		close(listener_d);
+//        if (listener_d)
+//		close(listener_d);
 //        if (file_buf)
 //		free(file_buf);
 //	if (buf)
@@ -302,6 +335,31 @@ int main(int argc, char *argv[])
 	return 0;
 
 }
+
+
+bool str_search(char *writefile, char *str)
+{
+
+	FILE *fp_read;
+	int line_num = 1;
+//	int find_result = 0;
+	char temp[1024];
+
+	if ((fp_read = fopen(writefile, "r")) == NULL)
+		error("unreadable file");
+	while(fgets(temp, 1024, fp_read) != NULL) 
+	{
+		if((strstr(temp, str)) != NULL)
+		{
+			fclose(fp_read);
+			return true;
+		}
+		line_num++;
+	}
+	fclose(fp_read);
+	return false;
+}
+
 
 
 
@@ -371,16 +429,31 @@ void bind_to_port(int socket, int port)
 }
 */
 
-void append_str(char *writefile,char *writestr) 
+void append_str(char *writefile,char *writestr, bool *status) 
 {
-	FILE * fp = fopen(writefile, "a");
-	if (fp == NULL)
-		error("Can't open file");
+	if (status)
+	{
+		FILE *fp = fopen(writefile, "w");
+	        if (fp == NULL)
+	                error("Can't open file");
 
-	fputs(writestr, fp);
-	if (ferror(fp))
-		error("error writing file");
+        	fputs(writestr, fp);
+        	if (ferror(fp))
+                	error("error writing file");
+		
+		fclose(fp);
+	}
+	else
+	{
+		FILE * fp = fopen(writefile, "a");
+		if (fp == NULL)
+			error("Can't open file");
 
+		fputs(writestr, fp);
+		if (ferror(fp))
+			error("error writing file");
+		fclose(fp);
+	}
 /*
         ssize_t nr = write(fp,writestr,strlen(writestr));
         if (nr == -1) {
@@ -390,8 +463,8 @@ void append_str(char *writefile,char *writestr)
 	
 //        int close (int fp);
 */
-        fclose(fp);
-
+//        fclose(fp);
+//	return 0;
 }
 
 
@@ -432,7 +505,7 @@ int read_in(int socket,int fp, char *writefile)
 
         int fsync(int fp);
 
-//	if (append_str(fp,writefile,s) != 0)
+	//	if (append_str(fp,writefile,s) != 0)
 //                error("Couldn't append test to file");
 //        if (append_str(fp,writefile,'\n') != 0)
 //                error("Couldn't append test to file");
@@ -451,32 +524,71 @@ int catch_signal(int sig, void (*handler)(int))
 	action.sa_flags = 0;
 	return sigaction (sig, &action, NULL);
 }
-
+/*
 void handle_shut_down(int sig)
 {
-	printf("%d\n",sig);
-        
-//	if (fp_buf)
+        printf("Signal Caught: %d\n",sig);
+             
+        syslog(LOG_INFO, "Caught signal, exiting\n");
+//      if (fp_buf)
 //                fclose(fp_buf);
 //        if (listener_d)
 //                close(listener_d);
-        if (file_buf)
+        if (!file_buf_free)
                 free(file_buf);
-        if (buf)
+        if (!buf_free)
                 free(buf);
-/*        if (connect_d)
-//                close(connect_d);
+        if (connect_d)
+                close(connect_d);
 
-	if (remove(writefile) == 0)
+        if (remove(writefile) == 0)
                 puts("file removed");
         else
-                error("remove file fail");	
-*/
-	if (servinfo)
-		freeaddrinfo(servinfo);
-	shutdown(listener_d, SHUT_RDWR);
-	puts("Goodbye!");
+                error("remove file fail");    
+
+    
+        freeaddrinfo(servinfo);
+        shutdown(listener_d, SHUT_RDWR);
+        puts("Goodbye!");
         exit(sig);
+//	term = true;
+}
+*/
+
+void handle_shut_down(int sig)
+{
+	printf("Signal Caught: %d\n",sig);
+	if (!connected)
+	{
+
+        	syslog(LOG_INFO, "Caught signal, exiting\n");
+//		if (fp_buf)
+//                fclose(fp_buf);
+//        	if (listener_d)
+//                	close(listener_d);
+        	if (!file_buf_free)
+                	free(file_buf);
+        	if (!buf_free)
+                	free(buf);
+	        if (connect_d)
+	                close(connect_d);
+
+		if (remove(writefile) == 0)
+        	        puts("file removed");
+        	else
+                	error("remove file fail");	
+
+	
+		freeaddrinfo(servinfo);
+		shutdown(listener_d, SHUT_RDWR);
+		puts("Goodbye!");
+        	exit(sig);
+	}
+	else
+	{
+		term = true;
+//		exit(sig);
+	}
 }
 
 
