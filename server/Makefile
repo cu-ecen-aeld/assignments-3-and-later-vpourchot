@@ -5,7 +5,7 @@ CFLAGS=-Wall -Werror -g
 CC=aarch64-none-linux-gnu-gcc
 COMPILE=gcc
 
-#all: $(OBJ)
+all: $(OBJ)
 
 writer: $(SRC)
 	$(COMPILE) $(CFLAGS) $(SRC) -o $(OBJ)
