@@ -18,18 +18,10 @@
 
 #define SERVER_PORT 9000
 
-/*
-struct addrinfo *servinfo;
-int listener_d,connect_d,fp;
-char *buf,*file_buf,*writefile;
-*/
-//FILE 	*fp_buf;
 void 	error();
 void 	handle_shut_down();
-//void 	handle_shut_down_2();
 void 	bind_to_port();
 struct 	addrinfo *servinfo;
-//struct 	addrinfo hints;
 char	*writefile;
 char	*buf;
 char	*file_buf;
@@ -41,6 +33,7 @@ bool 	no_queue;
 bool	str_search();
 int	listener_d;
 int	connect_d;
+int	queue;
 int 	open_listener_socket();
 int 	catch_signal();
 int 	read_in();
@@ -65,20 +58,12 @@ int main(int argc, char *argv[])
 		if (strcmp(argv[1], "-d") == 0)
 			d_mode = true;
 	}
-//        if (catch_signal(SIGINT, handle_shut_down) == -1)  
-//              error("SigInt");
-
-//        if (catch_signal(SIGTERM, handle_shut_down) == -1)
-//              error("SigTerm");
 	buf_free = true;
 	file_buf_free = true;
 	
 	signal(SIGINT, handle_shut_down);
 	signal(SIGTERM, handle_shut_down);
 
-//	struct addrinfo *servinfo;
-//	int listener_d,connect_d,fp;
-//	char *buf,*file_buf,*writefile;
 	
 	int status;
 	struct addrinfo hints;
@@ -86,7 +71,7 @@ int main(int argc, char *argv[])
         hints.ai_family =       AF_UNSPEC;
         hints.ai_socktype =     SOCK_STREAM;
         hints.ai_flags =        AI_PASSIVE;
-//        int reuse =             1;
+        int reuse =             1;
 
         if ((status = getaddrinfo(NULL, "9000", &hints, &servinfo) != 0))
 	{
@@ -103,7 +88,7 @@ int main(int argc, char *argv[])
 	}
 
         puts("test2");
-        if (setsockopt(listener_d, SOL_SOCKET, SO_REUSEADDR,&(int){1}, sizeof(int)) == -1)
+        if (setsockopt(listener_d, SOL_SOCKET, SO_REUSEADDR,&reuse, sizeof(int)) == -1)
 	{
 		perror("Can't set the reuse option on the socket");
 		return -1;
@@ -115,7 +100,6 @@ int main(int argc, char *argv[])
 		perror("Can't bind to socket");
 		return -1;
 	}
-//        bind_to_port(listen_fd, SERVER_PORT);
 	if(d_mode && c == 0)
 	{
 		int pid = fork();
@@ -123,8 +107,6 @@ int main(int argc, char *argv[])
 			exit(0);
 	}
 
-//	if (strcmp("-d", argv[1]) == 0)
-//                daemon (0,1);
 	char ipv4[INET_ADDRSTRLEN];
         puts("test3");
         if (listen(listener_d, 10) == -1) 
@@ -132,30 +114,19 @@ int main(int argc, char *argv[])
 		perror("Can't listen");
 		return -1;
 	}
-//        struct sockaddr_storage client_addr;
-//        unsigned int address_size = sizeof(client_addr);
 
         puts("Waiting for connection");
 
         writefile = "/var/tmp/aesdsocketdata";
 
-//        fp = open(writefile,O_WRONLY | O_CREAT | O_APPEND | O_TRUNC, 0666);
         FILE *fp_buf = fopen(writefile, "w+");
 	if (fp_buf == NULL) 
 	{
 		perror("Directory does not exist");
 		return -1;
 	}
-//	file_buf = malloc(BUF_SIZE);
 	fclose(fp_buf);
 	puts("test4");
-/*        connect_d = accept(listener_d, servinfo->ai_addr, &servinfo->ai_addrlen);
-        if (connect_d == -1)
-                error("Can't open secondary socket");
-		
-        syslog(LOG_DEBUG,"Accepted connection from %d",connect_d);
-	puts("test4");	
-*/
         while (!term || !no_queue) 
         {
 		puts("loop0");
@@ -184,10 +155,6 @@ int main(int argc, char *argv[])
 		ssize_t read_d = 0;
 
 		puts("loop1");  
-//                int new_line = read_in(connect_d,fp,writefile);
-//		if (new_line != 0)
-//			error("Didn't finish stream\n");
-
 		
 		while((read_d = recv(connect_d,file_buf,BUF_SIZE,0)) > 0)
 		{
@@ -215,25 +182,6 @@ int main(int argc, char *argv[])
 					append_str(writefile, buf, status);
 					
 					FILE * fp_buf;	
-//					FILE *fp, *fp_buf;
-/*										
-					fp_buf = fopen(writefile, "a");
-					if (fp_buf == NULL)
-					{
-						syslog(LOG_ERR, "Error opening %s", writefile);
-						exit(EXIT_FAILURE);
-					}
-
-					fputs(buf,fp_buf);
-					if (ferror(fp_buf))
-					{
-						syslog(LOG_ERR, "Error writing %s", buf);
-						exit(EXIT_FAILURE);
-					}		
-					fclose(fp_buf);
-*/
-			//		file_buf = (char *) malloc(BUF_SIZE);
-			//		memset(file_buf,0,BUF_SIZE);
 			 	 	size_t len = 0;
 					char * line = NULL;
 					ssize_t buffer;
@@ -241,18 +189,6 @@ int main(int argc, char *argv[])
 					if (fp_buf == NULL)
 						error("file not founds");
 
-/*
-		if (f)
-		{
-			fseek (f, 0, SEEK_END);
-			length = ftell(f);
-			fseek (f,0,SEEK_SET);
-			
-			fread(file_buf,1,length,f);
-//			file_buf[length-1] = '\0';
-//			fclose(f);
-		}
-*/		
 					while((buffer = getline(&line,&len,fp_buf)) != -1)
 					{
 						ssize_t sent = send(connect_d, line, buffer, 0);
@@ -261,34 +197,18 @@ int main(int argc, char *argv[])
 						else
 							printf("Sent: %s",line);
 					}
-/*		char *s = file_buf;
-//		length = read(fp,file_buf,BUF_SIZE);
-                printf("%s",s);	
-		for (int i = 0; i < strlen(s); i++)
-		{
-			puts("send_loop");
-                        int send_d = send(connect_d,&s[i],sizeof(&s[i]), 0);
-			if (send_d == -1)
-                                error("unable to send");
-
-//			memset(file_buf,0,BUF_SIZE);
-//                      length = read(fp,file_buf,sizeof(file_buf));
-			
-		}
-*/
 					if (line)
 						free(line);
 					if (fp_buf)
 						fclose(fp_buf);
-//					free(file_buf);
 					break;
 				}
 			}
+			if (queue == 0)
+				no_queue = true;
+
 			memset(file_buf, 0, BUF_SIZE);
-//			free(buf);
 		}
-//	        memset(file_buf, 0, BUF_SIZE);
-//		memset(buf, 0, 1);
 		
            	free(file_buf);
         	file_buf_free = true;
@@ -298,22 +218,10 @@ int main(int argc, char *argv[])
 		if (connect_d)
                 	close(connect_d);	
 		syslog(LOG_INFO, "Closed connection from %s\n", inet_ntop(AF_INET,&servinfo,ipv4,INET_ADDRSTRLEN));
-//		close(connect_d);
-//		freeaddrinfo(servinfo);
-//		free(buf);
-//		free(file_buf);
-/*	        if (remove(writefile) == 0)
-	                puts("file removed");
-        	else
-                	error("remove file fail");
-*/
 		puts("loop_end");
         
 	}
 	
-//	if (servinfo)
-//		freeaddrinfo(servinfo);
-//	freeaddrinfo(hints);
 	if (remove(writefile) == 0)
                 puts("file removed");
         else
@@ -321,16 +229,6 @@ int main(int argc, char *argv[])
 	freeaddrinfo(servinfo);
 	shutdown(listener_d, SHUT_RDWR);
 	puts("Shutdown Goodbye");
-//	if (fp_buf)
-//		fclose(fp_buf);
-//        if (listener_d)
-//		close(listener_d);
-//        if (file_buf)
-//		free(file_buf);
-//	if (buf)
-//		free(buf);
-//        if (connect_d)
-//		close(connect_d);
 
 	return 0;
 
@@ -373,14 +271,8 @@ void error(char *msg)
 
         puts("shut_down_err\n");
 
-//        if (fp_buf)
-//                fclose(fp_buf);
         if (listener_d)
                 close(listener_d);
-//        if (file_buf)
-//                free(file_buf);
-//        if (buf)
-//                free(buf);
         if (connect_d)
                 close(connect_d);
 
@@ -397,43 +289,13 @@ void error(char *msg)
 
 }
 
-/*
-int open_listener_socket()
-{
-	int listener_d = socket(servinfo->ai_family, servinfo->ai_socktype, 0);
-	if (listener_d == -1) 
-		error("Can't open socket");
-
-	return listener_d;
-}
-
-
-void bind_to_port(int socket, int port)
-{
-	
-	memset(&hints, 0, sizeof(hints));
-
-	hints.ai_family = 	AF_UNSPEC;
-	hints.ai_socktype = 	SOCK_STREAM;
-	hints.ai_flags = 	AI_PASSIVE;
-	int reuse = 		1;
-
-	if ((status = getaddrinfo(NULL, "9000", &hints, &servinfo) != 0))
-			error("getaddrinfo fail");
-	if (setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse, sizeof(int)) == -1)
-		error("Can't set the reuse option on the socket");
-
-	int c = bind (socket, servinfo->ai_addr, servinfo->ai_socktype);
-	if (c == -1)
-		error("Can't bind to socket");
-}
-*/
 
 void append_str(char *writefile,char *writestr, bool *status) 
 {
 	if (status)
 	{
 		FILE *fp = fopen(writefile, "w");
+		queue = 5;
 	        if (fp == NULL)
 	                error("Can't open file");
 
@@ -446,6 +308,7 @@ void append_str(char *writefile,char *writestr, bool *status)
 	else
 	{
 		FILE * fp = fopen(writefile, "a");
+		queue--;
 		if (fp == NULL)
 			error("Can't open file");
 
@@ -454,17 +317,6 @@ void append_str(char *writefile,char *writestr, bool *status)
 			error("error writing file");
 		fclose(fp);
 	}
-/*
-        ssize_t nr = write(fp,writestr,strlen(writestr));
-        if (nr == -1) {
-                error("unable to write to file");
-        }
-        int fsync(int fp);
-	
-//        int close (int fp);
-*/
-//        fclose(fp);
-//	return 0;
 }
 
 
@@ -473,45 +325,16 @@ int read_in(int socket,int fp, char *writefile)
         char *s =       malloc(BUF_SIZE);
         memset(s,0,BUF_SIZE);
 	int slen =      sizeof(s);
-//        int c =         
 	int c = recv(socket, s, slen, 0);
 	s[c - 1] = '\n';
 	printf("%s",s);
-/*        while ((c > 0) && (s[c-1] != '\n'))
-        {
-                s += c;
-                slen -= c;
-                c = recv(socket, s, slen, 0);
-        }
-
-        if (c < 0)
-                return c;
-        else if (c == 0)
-                s[0] = '\0';
-        else
-	{
-		s[c-1] = '\0';
-	}
-*/	
-//	strcat(s,(char*)'\n');	
-//	char *new_ln = '\n';
         ssize_t nr = write(fp,s,strlen(s));
         if (nr == -1) 
                 error("unable to write to file");
         
-//	nr = write(fp,new_ln,strlen(new_ln));
-  //      if (nr == -1)
-    //            error("unable to write to file");
-
         int fsync(int fp);
 
-	//	if (append_str(fp,writefile,s) != 0)
-//                error("Couldn't append test to file");
-//        if (append_str(fp,writefile,'\n') != 0)
-//                error("Couldn't append test to file");
-	
         printf("%s",s);
-//	free(s);
         return 0; //len - slen;
 
 }
@@ -524,36 +347,6 @@ int catch_signal(int sig, void (*handler)(int))
 	action.sa_flags = 0;
 	return sigaction (sig, &action, NULL);
 }
-/*
-void handle_shut_down(int sig)
-{
-        printf("Signal Caught: %d\n",sig);
-             
-        syslog(LOG_INFO, "Caught signal, exiting\n");
-//      if (fp_buf)
-//                fclose(fp_buf);
-//        if (listener_d)
-//                close(listener_d);
-        if (!file_buf_free)
-                free(file_buf);
-        if (!buf_free)
-                free(buf);
-        if (connect_d)
-                close(connect_d);
-
-        if (remove(writefile) == 0)
-                puts("file removed");
-        else
-                error("remove file fail");    
-
-    
-        freeaddrinfo(servinfo);
-        shutdown(listener_d, SHUT_RDWR);
-        puts("Goodbye!");
-        exit(sig);
-//	term = true;
-}
-*/
 
 void handle_shut_down(int sig)
 {
@@ -562,10 +355,6 @@ void handle_shut_down(int sig)
 	{
 
         	syslog(LOG_INFO, "Caught signal, exiting\n");
-//		if (fp_buf)
-//                fclose(fp_buf);
-//        	if (listener_d)
-//                	close(listener_d);
         	if (!file_buf_free)
                 	free(file_buf);
         	if (!buf_free)
@@ -582,53 +371,9 @@ void handle_shut_down(int sig)
 		freeaddrinfo(servinfo);
 		shutdown(listener_d, SHUT_RDWR);
 		puts("Goodbye!");
-        	exit(sig);
+//        	exit(sig);
 	}
 	else
-	{
 		term = true;
-//		exit(sig);
-	}
+	exit(sig);
 }
-
-
-
-/* Logs message to the syslog "Accepted Connection from xxx"
- * where xxxx is the IP address of the connected client
- */
-
-
-
-
-
-
-/**
- * Receives data over the connection and appends to file /var/tmp/aesdsocketdata,
- * creating this file if it doesn't exist
- */
-
-
-
-
-/**
- * Returns the full content of /var/tmp/aesdsocketdata to the client
- * as soon as the received data packet completes
- */
-
-
-
-
-/**
- * Logs message to the syslog "Caught signal, exiting" when SIGINT or SIGTERM is received
- */
-
-
-
-
-/**
- * Exits when SIGINT or SIGTERM is received, completeing an open connection operations,
- * closing open sockets, and
- * deleting the file /var/tmp/aesdsocketdata
- */
-
-
